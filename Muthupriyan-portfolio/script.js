@@ -106,7 +106,7 @@ const PROJECTS = [
     category: null,
     description: 'Project details coming soon.',
     technologies: [],
-    liveUrl: null,
+    liveUrl: 'https://moi-note.netlify.app/',
     repoUrl: null,
   },
   {
@@ -116,7 +116,7 @@ const PROJECTS = [
     category: null,
     description: 'Project details coming soon.',
     technologies: [],
-    liveUrl: null,
+    liveUrl: 'https://atti-app.onrender.com/',
     repoUrl: null,
   },
   {
@@ -126,7 +126,7 @@ const PROJECTS = [
     category: null,
     description: 'Project details coming soon.',
     technologies: [],
-    liveUrl: null,
+    liveUrl: 'https://cinepickai.netlify.app/',
     repoUrl: null,
   },
   {
@@ -136,7 +136,7 @@ const PROJECTS = [
     category: null,
     description: 'Project details coming soon.',
     technologies: [],
-    liveUrl: null,
+    liveUrl: 'https://t.me/muthu_helper_bot',
     repoUrl: null,
   },
   {
@@ -146,7 +146,7 @@ const PROJECTS = [
     category: null,
     description: 'Project details coming soon.',
     technologies: [],
-    liveUrl: null,
+    liveUrl: 'https://poetic-bonbon-f18691.netlify.app/',
     repoUrl: null,
   },
   {
@@ -156,7 +156,7 @@ const PROJECTS = [
     category: null,
     description: 'Project details coming soon.',
     technologies: [],
-    liveUrl: null,
+    liveUrl: 'https://muthupriyan-dev.github.io/smart-attendance/attendance-system.html',
     repoUrl: null,
   },
   {
@@ -166,7 +166,7 @@ const PROJECTS = [
     category: null,
     description: 'Project details coming soon.',
     technologies: [],
-    liveUrl: null,
+    liveUrl: 'https://muthupriyan-dev.github.io/passguard_ultimate/',
     repoUrl: null,
   },
   {
@@ -176,7 +176,7 @@ const PROJECTS = [
     category: null,
     description: 'Project details coming soon.',
     technologies: [],
-    liveUrl: null,
+    liveUrl: 'https://muthupriyan-dev.github.io/phishguard/Phishguard-AI-Pro.html',
     repoUrl: null,
   },
   {
@@ -186,7 +186,7 @@ const PROJECTS = [
     category: null,
     description: 'Project details coming soon.',
     technologies: [],
-    liveUrl: null,
+    liveUrl: 'https://muthupriyan-dev.github.io/flames/flames.html',
     repoUrl: null,
   },
   {
@@ -196,7 +196,7 @@ const PROJECTS = [
     category: null,
     description: 'Project details coming soon.',
     technologies: [],
-    liveUrl: null,
+    liveUrl: 'https://muthupriyan-dev.github.io/calculator/calculator.html',
     repoUrl: null,
   },
   {
@@ -206,7 +206,7 @@ const PROJECTS = [
     category: null,
     description: 'Project details coming soon.',
     technologies: [],
-    liveUrl: null,
+    liveUrl: 'https://muthupriyan-dev.github.io/tic-tac-toe/tic-tac-toe.html',
     repoUrl: null,
   },
   {
@@ -216,7 +216,7 @@ const PROJECTS = [
     category: null,
     description: 'Project details coming soon.',
     technologies: [],
-    liveUrl: null,
+    liveUrl: 'https://muthupriyan-dev.github.io/Kilimind/kilimind.html',
     repoUrl: null,
   },
   {
@@ -226,7 +226,7 @@ const PROJECTS = [
     category: null,
     description: 'Project details coming soon.',
     technologies: [],
-    liveUrl: null,
+    liveUrl: 'https://disciplinex-web.netlify.app/',
     repoUrl: null,
   },
 ];
@@ -293,14 +293,18 @@ function renderPortfolioSections() {
           : '';
 
       return `
-        <article class="project-card">
+        <article class="project-card${hasLiveUrl ? ' project-card--clickable' : ''}">
           <div class="project-card__top">
             <span class="project-card__index" aria-hidden="true">${project.index}</span>
             <div class="project-card__icon-wrap" aria-hidden="true">${ICONS.folderGit}</div>
           </div>
           <div class="project-card__content">
             ${categoryHtml}
-            <h3 class="project-card__title">${project.name}</h3>
+            <h3 class="project-card__title">${
+              hasLiveUrl
+                ? `<a href="${project.liveUrl}" target="_blank" rel="noopener noreferrer" class="project-card__link" aria-label="Open ${project.name} live project">${project.name}</a>`
+                : project.name
+            }</h3>
             <p class="project-card__description">${project.description}</p>
           </div>
           ${techHtml}
