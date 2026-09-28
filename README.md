@@ -4,8 +4,6 @@ A modern, responsive personal portfolio for **Muthupriyan**, Full Stack Develope
 
 🔗 **Live Demo:** [https://muthupriyan-portfolio.vercel.app](https://muthupriyan-portfolio.vercel.app/)
 
-![Portfolio hero preview](./center.webp)
-
 ---
 
 ## ✨ Features
