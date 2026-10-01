@@ -381,53 +381,126 @@ function initCursorCharacter() {
 
   let centerImg = null;
   let centerBitmap = null;
-  let sheetImg = null;
-  const frameBitmaps = new Array(TOTAL_FRAMES).fill(null);
   let lastDrawnKey = null;
 
-  function drawCenter() {
-    const source = centerBitmap || centerImg;
-    if (!source || lastDrawnKey === 'center') return;
+  // Frames are loaded on demand from ./frames/fNN.webp (1280x722 each, same quality as before).
+  // Compressed bytes are cached for all frames; only a small window of decoded bitmaps stays in memory.
+  const FRAME_URL = (i) => `./frames/f${String(i).padStart(2, '0')}.webp`;
+  const MAX_DECODED = 28;
+  const PREFETCH_RADIUS = 6;
+  const frameBlobs = new Array(TOTAL_FRAMES).fill(null);
+  const blobLoading = new Array(TOTAL_FRAMES).fill(false);
+  const decoded = new Map(); // frameIndex -> ImageBitmap | HTMLImageElement (insertion order = LRU)
+  const decoding = new Set();
+
+  function paint(source, key) {
     ctx.globalAlpha = 1.0;
     ctx.globalCompositeOperation = 'source-over';
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(source, 0, 0, CANVAS_W, CANVAS_H);
-    lastDrawnKey = 'center';
+    lastDrawnKey = key;
+  }
+
+  function drawCenter() {
+    const source = centerBitmap || centerImg;
+    if (!source || lastDrawnKey === 'center') return;
+    paint(source, 'center');
+  }
+
+  function fetchBlob(i) {
+    if (frameBlobs[i] || blobLoading[i]) return Promise.resolve(frameBlobs[i]);
+    blobLoading[i] = true;
+    return fetch(FRAME_URL(i))
+      .then((r) => (r.ok ? r.blob() : Promise.reject(new Error('frame ' + i))))
+      .then((b) => {
+        frameBlobs[i] = b;
+        blobLoading[i] = false;
+        return b;
+      })
+      .catch(() => {
+        blobLoading[i] = false;
+        return null;
+      });
+  }
+
+  function evictIfNeeded(keep) {
+    while (decoded.size > MAX_DECODED) {
+      let victim = null;
+      for (const k of decoded.keys()) {
+        if (!keep.has(k)) {
+          victim = k;
+          break;
+        }
+      }
+      if (victim === null) return;
+      const old = decoded.get(victim);
+      decoded.delete(victim);
+      if (old && typeof old.close === 'function') old.close();
+    }
+  }
+
+  function decodeFrame(i) {
+    if (decoded.has(i) || decoding.has(i)) return;
+    decoding.add(i);
+    fetchBlob(i)
+      .then((blob) => {
+        if (!blob) return null;
+        if (typeof window.createImageBitmap === 'function') {
+          return window.createImageBitmap(blob);
+        }
+        return new Promise((resolve) => {
+          const url = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => {
+            URL.revokeObjectURL(url);
+            resolve(img);
+          };
+          img.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve(null);
+          };
+          img.src = url;
+        });
+      })
+      .then((bmp) => {
+        decoding.delete(i);
+        if (bmp) decoded.set(i, bmp);
+      })
+      .catch(() => decoding.delete(i));
+  }
+
+  function prefetchAround(frameIndex) {
+    const keep = new Set([frameIndex]);
+    for (let d = 1; d <= PREFETCH_RADIUS; d++) {
+      const a = (frameIndex + d) % TOTAL_FRAMES;
+      const b = (frameIndex - d + TOTAL_FRAMES) % TOTAL_FRAMES;
+      keep.add(a);
+      keep.add(b);
+      decodeFrame(a);
+      decodeFrame(b);
+    }
+    evictIfNeeded(keep);
   }
 
   function drawSheetFrame(frameIndex) {
     const key = `frame_${frameIndex}`;
     if (lastDrawnKey === key) return;
 
-    const bmp = frameBitmaps[frameIndex];
+    const bmp = decoded.get(frameIndex);
     if (bmp) {
-      ctx.globalAlpha = 1.0;
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(bmp, 0, 0, CANVAS_W, CANVAS_H);
-      lastDrawnKey = key;
+      // refresh LRU position
+      decoded.delete(frameIndex);
+      decoded.set(frameIndex, bmp);
+      paint(bmp, key);
+      prefetchAround(frameIndex);
       return;
     }
 
-    if (!sheetImg) {
-      drawCenter();
-      return;
-    }
-
-    const tileW = sheetImg.naturalWidth / SHEET_COLS;
-    const tileH = sheetImg.naturalHeight / SHEET_ROWS;
-    const col = frameIndex % SHEET_COLS;
-    const row = Math.floor(frameIndex / SHEET_COLS);
-    const sx = col * tileW;
-    const sy = row * tileH;
-    ctx.globalAlpha = 1.0;
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(sheetImg, sx, sy, tileW, tileH, 0, 0, CANVAS_W, CANVAS_H);
-    lastDrawnKey = key;
+    // Not decoded yet: keep showing the previous image (no flicker), request it, try again next tick.
+    decodeFrame(frameIndex);
+    prefetchAround(frameIndex);
+    if (!lastDrawnKey) drawCenter();
   }
 
   function loadImageCandidates(candidates, onSuccess) {
@@ -447,7 +520,7 @@ function initCursorCharacter() {
   }
 
   loadImageCandidates(
-    ['./center.webp', './public/frames/center.webp', './frames/center.webp'],
+    ['./center.webp'],
     (img) => {
       centerImg = img;
       canvas.classList.add('character-canvas--ready');
@@ -460,27 +533,28 @@ function initCursorCharacter() {
     }
   );
 
-  loadImageCandidates(
-    ['./sheet.webp', './public/frames/sheet.webp', './frames/sheet.webp'],
-    (img) => {
-      sheetImg = img;
-      // Pre-slice all 64 directional tiles into GPU-backed ImageBitmaps for zero-latency 60fps drawing
-      if (typeof window.createImageBitmap === 'function') {
-        const tileW = img.naturalWidth / SHEET_COLS;
-        const tileH = img.naturalHeight / SHEET_ROWS;
-        for (let i = 0; i < TOTAL_FRAMES; i++) {
-          const col = i % SHEET_COLS;
-          const row = Math.floor(i / SHEET_COLS);
-          window
-            .createImageBitmap(img, col * tileW, row * tileH, tileW, tileH)
-            .then((bmp) => {
-              frameBitmaps[i] = bmp;
-            })
-            .catch(() => {});
-        }
-      }
+  // After the page has fully loaded and the browser is idle, quietly download the remaining
+  // frames (compressed, ~4 MB total, 3 at a time). Skipped when the visitor has Data Saver on.
+  function backgroundFetchFrames() {
+    const conn = navigator.connection;
+    if (conn && conn.saveData) return;
+    let next = 0;
+    function worker() {
+      if (next >= TOTAL_FRAMES) return;
+      const i = next++;
+      fetchBlob(i).then(() => setTimeout(worker, 30));
     }
-  );
+    for (let w = 0; w < 3; w++) worker();
+  }
+  function scheduleBackgroundFetch() {
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(backgroundFetchFrames, { timeout: 4000 });
+    } else {
+      setTimeout(backgroundFetchFrames, 1500);
+    }
+  }
+  if (document.readyState === 'complete') scheduleBackgroundFetch();
+  else window.addEventListener('load', scheduleBackgroundFetch, { once: true });
 
   function shortestAngleDiff(target, current) {
     let diff = target - current;
@@ -557,10 +631,32 @@ function initCursorCharacter() {
     state.angleInitialized = false;
   });
 
+  // Pause the render loop while the hero is off-screen or the tab is hidden (saves CPU/battery).
+  let heroVisible = true;
+  let looping = false;
+  function schedule() {
+    if (!heroVisible || document.hidden) {
+      looping = false;
+      return;
+    }
+    looping = true;
+    window.requestAnimationFrame(tick);
+  }
+  function resumeLoop() {
+    if (!looping) schedule();
+  }
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver((entries) => {
+      heroVisible = entries[entries.length - 1].isIntersecting;
+      if (heroVisible) resumeLoop();
+    }).observe(canvas);
+  }
+  document.addEventListener('visibilitychange', resumeLoop);
+
   function tick() {
     if (!state.hasPointerMoved || state.reducedMotion) {
       drawCenter();
-      window.requestAnimationFrame(tick);
+      schedule();
       return;
     }
 
@@ -617,10 +713,10 @@ function initCursorCharacter() {
       }
     }
 
-    window.requestAnimationFrame(tick);
+    schedule();
   }
 
-  window.requestAnimationFrame(tick);
+  schedule();
 }
 
 /* ============================================================================
@@ -780,4 +876,3 @@ document.addEventListener('DOMContentLoaded', () => {
   initCustomCursor();
   initNavbar();
 });
-a
