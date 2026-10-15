@@ -537,8 +537,6 @@ body {
   border-radius: 1.25rem;
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
   transition: transform 0.25s ease, border-color 0.25s ease, background-color 0.25s ease,
     box-shadow 0.25s ease;
 }
@@ -1199,5 +1197,22 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+
+/* Phones: avoid GPU-heavy blur effects, use slightly more opaque backgrounds instead */
+@media (max-width: 768px) {
+  .navbar-pill,
+  .hero-btn--secondary,
+  .navbar-mobile-menu {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .navbar-pill {
+    background: rgba(14, 14, 18, 0.82);
+  }
+  .hero-btn--secondary {
+    background: rgba(12, 12, 16, 0.6);
   }
 }

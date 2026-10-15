@@ -365,11 +365,17 @@ function initCursorCharacter() {
   if (!canvas) return;
 
   const ctx = canvas.getContext('2d', { alpha: false });
+  if (!ctx) return;
   const TOTAL_FRAMES = 64;
   const SHEET_COLS = 8;
   const SHEET_ROWS = 8;
-  const CANVAS_W = 1920;
-  const CANVAS_H = 1082;
+  // Phones get lighter (but still sharp) assets: half the download, 1024px frames are plenty for a
+  // <=560 CSS px canvas. Desktop keeps the original full-quality files untouched.
+  const IS_MOBILE = window.matchMedia('(max-width: 768px)').matches;
+  const CANVAS_W = IS_MOBILE ? 1024 : 1920;
+  const CANVAS_H = IS_MOBILE ? 578 : 1082;
+  const FRAME_DIR = IS_MOBILE ? './frames-m/' : './frames/';
+  const CENTER_URL = IS_MOBILE ? './center-m.webp' : './center.webp';
   canvas.width = CANVAS_W;
   canvas.height = CANVAS_H;
   ctx.imageSmoothingEnabled = true;
@@ -385,9 +391,9 @@ function initCursorCharacter() {
 
   // Frames are loaded on demand from ./frames/fNN.webp (1280x722 each, same quality as before).
   // Compressed bytes are cached for all frames; only a small window of decoded bitmaps stays in memory.
-  const FRAME_URL = (i) => `./frames/f${String(i).padStart(2, '0')}.webp`;
-  const MAX_DECODED = 28;
-  const PREFETCH_RADIUS = 6;
+  const FRAME_URL = (i) => `${FRAME_DIR}f${String(i).padStart(2, '0')}.webp`;
+  const MAX_DECODED = IS_MOBILE ? 10 : 14;
+  const PREFETCH_RADIUS = IS_MOBILE ? 2 : 3;
   const frameBlobs = new Array(TOTAL_FRAMES).fill(null);
   const blobLoading = new Array(TOTAL_FRAMES).fill(false);
   const decoded = new Map(); // frameIndex -> ImageBitmap | HTMLImageElement (insertion order = LRU)
@@ -398,8 +404,12 @@ function initCursorCharacter() {
     ctx.globalCompositeOperation = 'source-over';
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(source, 0, 0, CANVAS_W, CANVAS_H);
-    lastDrawnKey = key;
+    try {
+      ctx.drawImage(source, 0, 0, CANVAS_W, CANVAS_H);
+      lastDrawnKey = key;
+    } catch (err) {
+      /* bitmap was closed/invalid: skip this frame instead of crashing */
+    }
   }
 
   function drawCenter() {
@@ -520,7 +530,7 @@ function initCursorCharacter() {
   }
 
   loadImageCandidates(
-    ['./center.webp'],
+    [CENTER_URL],
     (img) => {
       centerImg = img;
       canvas.classList.add('character-canvas--ready');
@@ -537,14 +547,14 @@ function initCursorCharacter() {
   // frames (compressed, ~4 MB total, 3 at a time). Skipped when the visitor has Data Saver on.
   function backgroundFetchFrames() {
     const conn = navigator.connection;
-    if (conn && conn.saveData) return;
+    if (conn && (conn.saveData || /(^|-)2g$/.test(conn.effectiveType || ''))) return;
     let next = 0;
     function worker() {
       if (next >= TOTAL_FRAMES) return;
       const i = next++;
       fetchBlob(i).then(() => setTimeout(worker, 30));
     }
-    for (let w = 0; w < 3; w++) worker();
+    for (let w = 0; w < (IS_MOBILE ? 2 : 3); w++) worker();
   }
   function scheduleBackgroundFetch() {
     if ('requestIdleCallback' in window) {
@@ -585,7 +595,21 @@ function initCursorCharacter() {
     inDeadzone: true,
     stableFrameIndex: -1,
     reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    lastActive: 0,
   };
+
+  // Cache the canvas rect (re-measured only on scroll/resize) instead of forcing layout every frame.
+  let cachedRect = canvas.getBoundingClientRect();
+  function wake() {
+    state.lastActive = performance.now();
+    resumeLoop();
+  }
+  function remeasure() {
+    cachedRect = canvas.getBoundingClientRect();
+    wake();
+  }
+  window.addEventListener('scroll', remeasure, { passive: true });
+  window.addEventListener('resize', remeasure, { passive: true });
 
   function handlePointerMove(clientX, clientY) {
     if (state.reducedMotion) return;
@@ -597,6 +621,7 @@ function initCursorCharacter() {
       state.pointerInitialized = true;
     }
     state.hasPointerMoved = true;
+    wake();
   }
 
   window.addEventListener(
@@ -629,6 +654,7 @@ function initCursorCharacter() {
     state.hasPointerMoved = false;
     state.inDeadzone = true;
     state.angleInitialized = false;
+    wake();
   });
 
   // Pause the render loop while the hero is off-screen or the tab is hidden (saves CPU/battery).
@@ -656,7 +682,17 @@ function initCursorCharacter() {
   function tick() {
     if (!state.hasPointerMoved || state.reducedMotion) {
       drawCenter();
-      schedule();
+      looping = false; // nothing to animate: stop the loop until the pointer moves again
+      return;
+    }
+
+    // Sleep once the pointer has been still for 2s and the right frame is already on screen.
+    if (
+      performance.now() - state.lastActive > 2000 &&
+      (lastDrawnKey === `frame_${state.stableFrameIndex}` ||
+        (state.inDeadzone && lastDrawnKey === 'center'))
+    ) {
+      looping = false;
       return;
     }
 
@@ -664,7 +700,7 @@ function initCursorCharacter() {
     state.filteredX += (state.pointerX - state.filteredX) * 0.45;
     state.filteredY += (state.pointerY - state.filteredY) * 0.45;
 
-    const rect = canvas.getBoundingClientRect();
+    const rect = cachedRect;
     if (rect.width > 0 && rect.height > 0) {
       const faceCenterX = rect.left + rect.width * FACE_CENTER_REL_X;
       const faceCenterY = rect.top + rect.height * FACE_CENTER_REL_Y;
