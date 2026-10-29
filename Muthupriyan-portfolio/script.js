@@ -371,15 +371,34 @@ function initCursorCharacter() {
   const SHEET_ROWS = 8;
   // Phones get lighter (but still sharp) assets: half the download, 1024px frames are plenty for a
   // <=560 CSS px canvas. Desktop keeps the original full-quality files untouched.
-  const IS_MOBILE = window.matchMedia('(max-width: 768px)').matches;
+  // Touch devices are treated as mobile even when "Desktop site" is on, so they never load the
+  // heavy 1920px canvas + large bitmaps (a common cause of the "Aw, Snap!" tab crash).
+  const IS_MOBILE =
+    window.matchMedia('(max-width: 768px)').matches ||
+    window.matchMedia('(pointer: coarse)').matches;
   const CANVAS_W = IS_MOBILE ? 1024 : 1920;
   const CANVAS_H = IS_MOBILE ? 578 : 1082;
   const FRAME_DIR = IS_MOBILE ? './frames-m/' : './frames/';
   const CENTER_URL = IS_MOBILE ? './center-m.webp' : './center.webp';
+  const SMOOTHING = IS_MOBILE ? 'medium' : 'high';
   canvas.width = CANVAS_W;
   canvas.height = CANVAS_H;
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
+  ctx.imageSmoothingQuality = SMOOTHING;
+
+  // Phones: the canvas is redrawn constantly, and a two-layer composited CSS mask on it is very
+  // expensive for mobile GPUs. Use a single cheap top fade instead (side fade is invisible anyway
+  // because the canvas spans the full screen width on phones).
+  if (IS_MOBILE) {
+    const lite = document.createElement('style');
+    lite.setAttribute('data-perf', 'mobile-canvas');
+    lite.textContent =
+      '.character-canvas{' +
+      '-webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 10%,#000 100%);' +
+      'mask-image:linear-gradient(to bottom,transparent 0%,#000 10%,#000 100%);' +
+      '-webkit-mask-composite:source-over;mask-composite:add;}';
+    document.head.appendChild(lite);
+  }
 
   const RESPONSE_FACTOR = 0.26;
   const FACE_CENTER_REL_X = 0.50;
@@ -392,7 +411,7 @@ function initCursorCharacter() {
   // Frames are loaded on demand from ./frames/fNN.webp (1280x722 each, same quality as before).
   // Compressed bytes are cached for all frames; only a small window of decoded bitmaps stays in memory.
   const FRAME_URL = (i) => `${FRAME_DIR}f${String(i).padStart(2, '0')}.webp`;
-  const MAX_DECODED = IS_MOBILE ? 10 : 14;
+  const MAX_DECODED = IS_MOBILE ? 6 : 14;
   const PREFETCH_RADIUS = IS_MOBILE ? 2 : 3;
   const frameBlobs = new Array(TOTAL_FRAMES).fill(null);
   const blobLoading = new Array(TOTAL_FRAMES).fill(false);
@@ -403,7 +422,7 @@ function initCursorCharacter() {
     ctx.globalAlpha = 1.0;
     ctx.globalCompositeOperation = 'source-over';
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    ctx.imageSmoothingQuality = SMOOTHING;
     try {
       ctx.drawImage(source, 0, 0, CANVAS_W, CANVAS_H);
       lastDrawnKey = key;
@@ -448,6 +467,21 @@ function initCursorCharacter() {
       decoded.delete(victim);
       if (old && typeof old.close === 'function') old.close();
     }
+  }
+
+  // Free every decoded bitmap (the canvas keeps its current pixels). Called when the tab/app goes
+  // to the background so Chrome has less reason to kill the renderer ("Aw, Snap!" on return).
+  function releaseDecodedMemory() {
+    decoded.forEach((bmp) => {
+      if (bmp && typeof bmp.close === 'function') {
+        try {
+          bmp.close();
+        } catch (err) {
+          /* already closed */
+        }
+      }
+    });
+    decoded.clear();
   }
 
   function decodeFrame(i) {
@@ -598,15 +632,22 @@ function initCursorCharacter() {
     lastActive: 0,
   };
 
-  // Cache the canvas rect (re-measured only on scroll/resize) instead of forcing layout every frame.
+  // Cache the canvas rect (re-measured only on scroll/resize, at most once per animation frame)
+  // instead of forcing layout on every scroll event.
   let cachedRect = canvas.getBoundingClientRect();
+  let remeasurePending = false;
   function wake() {
     state.lastActive = performance.now();
     resumeLoop();
   }
   function remeasure() {
-    cachedRect = canvas.getBoundingClientRect();
-    wake();
+    if (remeasurePending) return;
+    remeasurePending = true;
+    window.requestAnimationFrame(() => {
+      remeasurePending = false;
+      cachedRect = canvas.getBoundingClientRect();
+      wake();
+    });
   }
   window.addEventListener('scroll', remeasure, { passive: true });
   window.addEventListener('resize', remeasure, { passive: true });
@@ -677,7 +718,14 @@ function initCursorCharacter() {
       if (heroVisible) resumeLoop();
     }).observe(canvas);
   }
-  document.addEventListener('visibilitychange', resumeLoop);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      releaseDecodedMemory();
+    } else {
+      resumeLoop();
+    }
+  });
+  window.addEventListener('pagehide', releaseDecodedMemory);
 
   function tick() {
     if (!state.hasPointerMoved || state.reducedMotion) {
