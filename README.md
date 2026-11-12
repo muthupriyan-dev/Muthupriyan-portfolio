@@ -1,6 +1,6 @@
 # Muthupriyan — Developer Portfolio
 
-A modern, responsive personal portfolio for **Muthupriyan**, Full Stack Developer & Freelancer. The hero features an interactive character whose gaze follows your cursor, built with a 64-frame sprite sheet rendered on an HTML canvas.
+A modern, responsive personal portfolio for **Muthupriyan**, Full Stack Developer & Freelancer. The hero features an interactive character whose gaze follows your cursor, built with 64 pre-rendered frames drawn on an HTML canvas.
 
 🔗 **Live Demo:** [https://muthupriyan-portfolio.vercel.app](https://muthupriyan-portfolio.vercel.app/)
 
@@ -8,7 +8,7 @@ A modern, responsive personal portfolio for **Muthupriyan**, Full Stack Develope
 
 ## ✨ Features
 
-- **Cursor-tracking 3D character**: a 64-frame sprite sheet (8 × 8 grid) drawn on `<canvas>`. The character looks toward your mouse or touch position, with angle smoothing and hysteresis to avoid flicker.
+- **Cursor-tracking 3D character**: 64 pre-rendered frames (desktop `frames/`, lighter `frames-m/` for phones) drawn on `<canvas>`. The character looks toward your mouse or touch position, with angle smoothing and hysteresis to avoid flicker.
 - **Custom magnetic cursor**: a glowing dot and aura that react to links and buttons (auto-disabled on touch devices).
 - **Floating glass navigation pill**: blurred, translucent navbar with scroll-aware active links and a mobile menu.
 - **Data-driven sections**: Projects, Areas of Work and Skills are rendered from plain JavaScript arrays, so content is easy to edit.
@@ -32,14 +32,21 @@ A modern, responsive personal portfolio for **Muthupriyan**, Full Stack Develope
 
 ## 📁 Project Structure
 
+The site lives in the `Muthupriyan-portfolio/` folder of this repo.
+
 ```
 .
-├── index.html      # Page markup
-├── style.css       # All styles and responsive rules
-├── script.js       # Data (projects/skills) + canvas character + cursor + navbar
-├── center.webp     # Default (front-facing) character frame
-├── sheet.webp      # 64-frame sprite sheet (8 × 8 grid)
-└── vercel.json     # Vercel config (cleanUrls)
+├── README.md
+└── Muthupriyan-portfolio/
+    ├── index.html      # Page markup + SEO / share-preview meta tags
+    ├── style.css       # All styles and responsive rules
+    ├── script.js       # Data (projects/skills) + canvas character + cursor + navbar
+    ├── center.webp     # Default (front-facing) character frame
+    ├── center-m.webp   # Lighter default frame for phones
+    ├── og-image.jpg    # 1200×630 image used for WhatsApp / LinkedIn / X link previews
+    ├── frames/         # 64 character frames (desktop)
+    ├── frames-m/       # 64 character frames (mobile)
+    └── vercel.json     # Vercel config (cleanUrls, caching)
 ```
 
 ---
@@ -58,7 +65,7 @@ npx serve .
 
 Then open `http://localhost:5500`.
 
-> Opening `index.html` directly with `file://` may block the sprite sheet from loading in some browsers, so use a local server.
+> Opening `index.html` directly with `file://` may block the character frames from loading in some browsers, so use a local server.
 
 ---
 
@@ -92,12 +99,30 @@ To add a project, fill in its entry. The **View Project** and **View Code** butt
 
 This is a static site, so no build is required.
 
-1. Push all files to the **root** of a GitHub repository.
-2. Import the repo in [Vercel](https://vercel.com/new).
+1. Import the repo in [Vercel](https://vercel.com/new).
+2. Set **Root Directory** to `Muthupriyan-portfolio` (the site lives in that folder).
 3. Set **Framework Preset** to `Other` and leave Build Command and Output Directory empty.
 4. Deploy.
 
 `vercel.json` enables `cleanUrls`, so pages resolve without the `.html` extension.
+
+---
+
+## 🚀 Featured Projects
+
+| Project | What it is | Stack |
+| ------- | ---------- | ----- |
+| CVastra AI | Resume analyzer with Gemini-based scoring across 7 dimensions | Node.js, Express, Gemini API |
+| Telegram AI Bot | Replies on my behalf when I am away, with memory, live search and 7-provider fallback | Node.js, Gemini, Groq, Firestore |
+| DisciplineX | Android app that keeps the phone locked until a camera-counted workout is done | Kotlin, Jetpack Compose, ML Kit |
+| ConnectX | Anonymous real-time video chat | WebRTC, Socket.IO |
+| CinePick AI | Movie picks by language, genre and mood, with a watchlist | JavaScript, TMDb API |
+| Gemini Forms Assistant | Chrome extension that suggests Google Forms answers, never auto-submits | Chrome MV3, Express, Gemini |
+| Moi Note | Tamil-friendly PWA to record Moi (gift) contributions | Firebase Auth, Firestore |
+| SmartAttend | Attendance system with student portal and teacher dashboard | Firebase |
+| PassGuard Ultimate | Password generator and breach checker (HIBP k-anonymity) | JavaScript |
+| PhishGuard | Browser-based URL analysis to build phishing awareness | JavaScript |
+| KiliMind | Tamil parrot fortune-telling web app | JavaScript |
 
 ---
 
